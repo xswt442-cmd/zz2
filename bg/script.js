@@ -52,6 +52,10 @@
     if (el && el.__last !== val) { el.style[prop] = val; el.__last = val; }
   }
 
+  /* optional live-signal effects — read from config.fx, default on */
+  var FXC = C.fx || {};
+  function fxOn(k) { return FXC[k] !== false; }
+
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
   /* ── live state ────────────────────────────────────────────────────── */
@@ -76,6 +80,8 @@
     nextBrandAt: 0,
     nextLogAt: 0,
     nextAnomAt: 0,
+    nextGlitchAt: 0,
+    nextTickerAt: 0,
     eggsFired: {}
   };
 
@@ -319,6 +325,9 @@
     setText($('v-san'), String(Math.round(state.sanity)));
     setStyle($('m-load'), 'width', state.load + '%');
     setStyle($('m-san'), 'width', state.sanity + '%');
+
+    // push a fresh temperature sample into the sparkline when it is on
+    if (fxOn('spark') && motion > 0) sampleSpark();
 
     // the physics egg watches for genuinely absurd readings
     if (state.temp < C.eggs.physicsThreshold) fireEgg('physics');
@@ -613,6 +622,288 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════
+     7b. LIVE-SIGNAL FX — ECG, temp sparkline, mini radar, glitch, ticker.
+     Small canvases in the corner panels, driven by the same rAF loop.
+     Each has its own fps cap; nothing is created per-frame, so there is
+     no leak path over a multi-hour session.
+     ══════════════════════════════════════════════════════════════════ */
+
+  var FX = {
+    ecg:   { canv: null, ctx: null, w: 0, h: 0, last: 0 },
+    spark: { canv: null, ctx: null, w: 0, h: 0, data: [] },
+    radar: { canv: null, ctx: null, w: 0, h: 0, last: 0, blips: [] }
+  };
+
+  /* size a canvas to its CSS box (devicePixelRatio-capped, modest buffers) */
+  function prepCanvas(id, key) {
+    var el = document.getElementById(id);
+    if (!el) return false;
+    var box = el.getBoundingClientRect();
+    var w = Math.max(2, Math.floor(box.width));
+    var h = Math.max(2, Math.floor(box.height));
+    var dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    el.width = Math.floor(w * dpr);
+    el.height = Math.floor(h * dpr);
+    var ctx = el.getContext('2d', { alpha: true });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    FX[key].w = w; FX[key].h = h;
+    FX[key].canv = el; FX[key].ctx = ctx;
+    return true;
+  }
+
+  function initECG()   { prepCanvas('ecg', 'ecg'); }
+  function initRadar() { prepCanvas('radar', 'radar'); }
+
+  function initSpark() {
+    if (prepCanvas('spark', 'spark')) {
+      // seed a short flat history so the trace is not empty at t0
+      var n = Math.max(2, Math.min(40, Math.floor(FX.spark.h * 0.5)));
+      for (var i = 0; i < n; i++) FX.spark.data.push(C.temperature);
+    }
+  }
+
+  function resizeFx() {
+    if (FX.ecg.canv)   prepCanvas('ecg', 'ecg');
+    if (FX.spark.canv) prepCanvas('spark', 'spark');
+    if (FX.radar.canv) prepCanvas('radar', 'radar');
+  }
+
+  function initFx() {
+    initECG();
+    initSpark();
+    initRadar();
+    // if the user disabled pulse rings in config, drop them from the DOM
+    if (!fxOn('pulse')) {
+      var rings = document.querySelectorAll('.pulse-ring');
+      for (var i = 0; i < rings.length; i++) {
+        if (rings[i].parentNode) rings[i].parentNode.removeChild(rings[i]);
+      }
+    }
+    // frozen mode: paint one static frame so the canvases never sit blank
+    if (motion === 0) { drawECG(0); drawSpark(); drawRadar(0); }
+  }
+
+  /* --- ECG ---------------------------------------------------------------
+     A dim "memory" waveform spans the strip; a bright reveal sweeps left to
+     right on a ~2.2s cycle, lit part trailing it and a dot riding the edge.
+     The waveform itself is static in x — the sweep is what moves. */
+  function ecgY(p) {
+    p = p - Math.floor(p); // keep p in [0,1)
+    var y = 0;
+    y += 0.12 * Math.exp(-Math.pow((p - 0.16) / 0.05, 2));   // P wave
+    y += 0.05 * Math.exp(-Math.pow((p - 0.205) / 0.018, 2)); // Q
+    y += 1.00 * Math.exp(-Math.pow((p - 0.26) / 0.04, 2));   // R peak
+    y -= 0.10 * Math.exp(-Math.pow((p - 0.315) / 0.024, 2)); // S
+    y += 0.30 * Math.exp(-Math.pow((p - 0.53) / 0.06, 2));   // T wave
+    return y;
+  }
+
+  function drawECG(ts) {
+    var g = FX.ecg, ctx = g.ctx;
+    if (!ctx || g.w < 8 || g.h < 8) return;
+    var w = g.w, h = g.h;
+    ctx.clearRect(0, 0, w, h);
+
+    var BEATS = 2;
+    var amp = h * 0.62;
+    var base = h * 0.5 + h * 0.16;
+    var span = Math.max(2, w);
+
+    // dim full waveform (the phosphor memory)
+    ctx.strokeStyle = 'rgba(127,200,232,0.13)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var x = 0; x <= w; x += 2) {
+      var y = base - ecgY((x / span) * BEATS) * amp;
+      if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // freshly drawn part, up to the sweep line
+    var scan = ((ts / 1000) / 2.2) % 1;
+    var sx = scan * w;
+    ctx.strokeStyle = 'rgba(223,240,246,0.72)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    var started = false;
+    for (var x2 = 0; x2 <= sx; x2 += 2) {
+      var y2 = base - ecgY((x2 / span) * BEATS) * amp;
+      if (!started) { ctx.moveTo(x2, y2); started = true; } else ctx.lineTo(x2, y2);
+    }
+    ctx.stroke();
+
+    // leading dot riding the sweep edge
+    ctx.fillStyle = 'rgba(223,240,246,0.9)';
+    ctx.beginPath();
+    ctx.arc(sx, base - ecgY((sx / span) * BEATS) * amp, 1.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // the sweep line itself
+    ctx.strokeStyle = 'rgba(223,240,246,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(sx, 2); ctx.lineTo(sx, h - 2); ctx.stroke();
+  }
+
+  /* --- temperature sparkline -------------------------------------------- */
+  function drawSpark() {
+    var g = FX.spark, ctx = g.ctx;
+    if (!ctx || g.w < 8 || g.h < 8) return;
+    var w = g.w, h = g.h;
+    ctx.clearRect(0, 0, w, h);
+    var data = g.data;
+    if (data.length < 2) return;
+
+    // frame + mid divider
+    ctx.strokeStyle = 'rgba(45,84,104,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    ctx.beginPath(); ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5); ctx.stroke();
+
+    // window around the configured baseline, widened to fit the actual range
+    var lo = C.temperature - 4, hi = C.temperature + 4;
+    var min = lo, max = hi;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i] < min) min = data[i];
+      if (data[i] > max) max = data[i];
+    }
+    if (max - min < 0.5) { max = hi; min = lo; }
+    var range = (max - min) || 1;
+    var n = data.length;
+    var step = w / (n - 1);
+    var yFor = function (v) { return h - ((v - min) / range) * (h - 4) - 2; };
+
+    // fill under the line
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (var x = 0; x < n; x++) ctx.lineTo(x * step, yFor(data[x]));
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(45,84,104,0.22)';
+    ctx.fill();
+
+    // the line
+    ctx.strokeStyle = 'rgba(127,200,232,0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (var x2 = 0; x2 < n; x2++) {
+      var yy = yFor(data[x2]);
+      if (x2 === 0) ctx.moveTo(0, yy); else ctx.lineTo(x2 * step, yy);
+    }
+    ctx.stroke();
+
+    // live sample dot on the right edge
+    ctx.fillStyle = 'rgba(223,240,246,0.9)';
+    ctx.beginPath(); ctx.arc(w - 2, yFor(data[n - 1]), 1.8, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function sampleSpark() {
+    var g = FX.spark;
+    if (!g.canv) return;
+    g.data.push(state.temp);
+    var maxPts = Math.max(24, Math.min(80, Math.floor(g.h * 0.6)));
+    while (g.data.length > maxPts) g.data.shift();
+    drawSpark();
+  }
+
+  /* --- mini radar -------------------------------------------------------- */
+  function drawRadar(ts) {
+    var g = FX.radar, ctx = g.ctx;
+    if (!ctx) return;
+    var w = g.w, h = g.h;
+    ctx.clearRect(0, 0, w, h);
+    var cx = w / 2, cy = h / 2;
+    var r = (Math.min(w, h) / 2) - 3;
+    if (r < 8) return;
+
+    // rings + crosshair
+    ctx.strokeStyle = 'rgba(45,84,104,0.4)';
+    ctx.lineWidth = 1;
+    for (var ring = 1; ring <= 3; ring++) {
+      ctx.beginPath(); ctx.arc(cx, cy, r * (ring / 3), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+    ctx.stroke();
+
+    // sweep beam, one revolution every ~4.5s
+    var ang = ((ts / 1000) / 4.5) * Math.PI * 2;
+    ctx.strokeStyle = 'rgba(127,200,232,0.75)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
+    ctx.stroke();
+
+    // fading trail behind the sweep
+    ctx.lineWidth = 1;
+    for (var k = 1; k <= 14; k++) {
+      var a = ang - k * 0.045;
+      var alpha = 0.22 * (1 - k / 14);
+      ctx.strokeStyle = 'rgba(127,200,232,' + alpha.toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r * 0.1, cy + Math.sin(a) * r * 0.1);
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      ctx.stroke();
+    }
+
+    // occasional amber blips, fading over ~2.6s
+    if (Math.random() < 0.015 && g.blips.length < 7) {
+      g.blips.push({ a: Math.random() * Math.PI * 2, d: Math.random() * 0.9, born: ts });
+    }
+    var nowSec = ts / 1000;
+    for (var b = g.blips.length - 1; b >= 0; b--) {
+      var bl = g.blips[b];
+      var age = nowSec - (bl.born / 1000);
+      if (age > 2.6) { g.blips.splice(b, 1); continue; }
+      var fade = 1 - (age / 2.6);
+      ctx.fillStyle = 'rgba(184,135,63,' + (fade * 0.55).toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(bl.a) * bl.d * r, cy + Math.sin(bl.a) * bl.d * r, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* --- random English signal strings (no CJK, no real meaning) ----------- */
+  function randCode() {
+    var pre = pick(['CRYO', 'SIG', 'PUL', 'VLT', 'GX', 'QX', 'HY', 'NODE', 'DSP']);
+    return pre + '-' + irnd(0, 99) + ' ' + rnd(0.1, 0.99).toFixed(2);
+  }
+  function randHex() {
+    return '0x' + Math.floor(Math.random() * 4096).toString(16).toUpperCase();
+  }
+
+  /* rare data glitch: one reading jumps, flashes amber, then reverts */
+  var GLITCH_TARGETS = ['v-temp', 'v-load', 'v-san', 'v-chill', 'v-core'];
+  function glitchTick(ts) {
+    if (ts < state.nextGlitchAt) return;
+    state.nextGlitchAt = ts + rnd(18000, 42000);
+    if (Math.random() > 0.6) return;
+
+    var el = $(pick(GLITCH_TARGETS));
+    if (!el) return;
+    var prev = el.textContent;
+    el.textContent = pick([randHex(), 'ERR//' + irnd(0, 99), 'NUL@' + irnd(0, 4096), '?#' + irnd(0, 9)]);
+    el.classList.add('glitch');
+    setTimeout(function () {
+      el.textContent = prev;
+      el.classList.remove('glitch');
+    }, 320);
+  }
+
+  /* randomly swap one of the scattered chamber trace strings */
+  function tickerTick(ts) {
+    if (ts < state.nextTickerAt) return;
+    state.nextTickerAt = ts + rnd(6000, 14000);
+
+    var traces = document.querySelectorAll('#ch-traces span');
+    if (traces.length) {
+      var el = traces[irnd(0, traces.length - 1)];
+      el.textContent = randCode();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
      8. SESSION CLOCK
      ══════════════════════════════════════════════════════════════════ */
 
@@ -654,6 +945,14 @@
       tickBiometrics();
     }
 
+    // --- live-signal fx canvases (capped fps, only when motion > 0) ---
+    if (motion > 0) {
+      if (fxOn('ecg') && ts - FX.ecg.last >= 50) { FX.ecg.last = ts; drawECG(ts); }
+      if (fxOn('radar') && ts - FX.radar.last >= 33) { FX.radar.last = ts; drawRadar(ts); }
+      if (fxOn('glitch')) glitchTick(ts);
+    }
+    if (fxOn('ticker')) tickerTick(ts);
+
     // --- log + anomalies + eggs + session clock ---
     tickLog(ts);
     tickAnomalies(ts);
@@ -677,6 +976,7 @@
       resizeTimer = setTimeout(function () {
         resizeGrain();
         seedFlakes();
+        resizeFx();
       }, 250);
     });
 
@@ -752,6 +1052,7 @@
     buildBars();
     buildAnomalies();
     initGrain();
+    initFx();
     initListeners();
     runBoot();
   }

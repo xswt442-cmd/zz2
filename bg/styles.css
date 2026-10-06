@@ -463,6 +463,73 @@ body::before {
 
 
 /* ==========================================================================
+   LIVE-SIGNAL FX — ECG, temp sparkline, mini radar, core pulse.
+   Same marginal cost policy as everything else: transform/opacity only,
+   no filters, no layout animation, no backdrop-filter.
+   ========================================================================== */
+
+/* cardiac sweep (bottom-left SUBJECT STATE) */
+.ecg {
+  display: block;
+  width: 100%;
+  height: 4rem;
+  margin-top: 0.55rem;
+  opacity: 0.85;
+}
+
+/* rolling temperature sparkline (top-right ENVIRONMENT) */
+.spark {
+  display: block;
+  width: 19rem;
+  height: 3.4rem;
+  margin-top: 0.6rem;
+  opacity: 0.8;
+}
+
+/* mini environmental radar (top-right ENVIRONMENT) */
+.radar {
+  display: block;
+  width: 9rem;
+  height: 9rem;
+  margin: 0.7rem auto 0;
+  opacity: 0.7;
+}
+
+/* expanding cryo-core pulse rings. opacity deliberately tiny here: the
+   .core-mark parent already multiplies everything by ~0.22. */
+.pulse-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 40vmin; height: 40vmin;
+  margin: -20vmin 0 0 -20vmin;
+  border-radius: 50%;
+  border: 1px solid rgba(127,200,232,0.5);
+  animation: pulse-ring calc(7s / var(--motion)) cubic-bezier(0.2,0.6,0.4,1) infinite;
+  will-change: transform, opacity;
+}
+.pulse-ring.pr-2 { animation-delay: calc(3.5s / var(--motion)); }
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.55); opacity: 0; }
+  18%  { opacity: 0.34; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* rare data glitch: quick horizontal jitter + amber flash */
+.glitch {
+  animation: text-jitter 0.32s steps(2) 1;
+  color: var(--c-amber) !important;
+}
+@keyframes text-jitter {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-0.12rem); }
+  50%  { transform: translateX(0.1rem); }
+  75%  { transform: translateX(-0.06rem); }
+  100% { transform: translateX(0); }
+}
+
+
+/* ==========================================================================
    HUD SHELL — four corners, centre deliberately empty
    ========================================================================== */
 
@@ -977,12 +1044,14 @@ body.still .dot-red,
 body.still .dot-amber,
 body.still .plate-status .live i,
 body.still .mod-foot .rec i,
-body.still .boot-line.ok::after {
+body.still .boot-line.ok::after,
+body.still .pulse-ring {
   animation: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fog > div, .contours svg, .ct, .hex, .core-sweep, .sweep::before {
+  .fog > div, .contours svg, .ct, .hex, .core-sweep, .sweep::before,
+  .pulse-ring {
     animation: none !important;
   }
 }

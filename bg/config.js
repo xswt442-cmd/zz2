@@ -143,6 +143,19 @@ window.CONFIG = {
   anomalySwapMs: [13000, 19000],  // random range between anomaly swaps
   warningCooldownMs: 150000,      // min gap between warning flashes
 
+  /* ---- optional live-signal fx ------------------------------------------
+     Each effect can be silenced independently without touching the CSS.
+     ecg/spark/radar are canvas-driven; glitch is a rare text flash;
+     ticker swaps random English telemetry strings; pulse is pure CSS. */
+  fx: {
+    ecg: true,
+    spark: true,
+    radar: true,
+    pulse: true,
+    glitch: true,
+    ticker: true
+  },
+
   /* ---- chamber filler ---------------------------------------------------
      Instrument-grade text scattered through the middle band. This exists so
      the centre does not read as empty black once gameplay is not covering

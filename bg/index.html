@@ -70,6 +70,9 @@
     </g>
   </svg>
   <div class="core-sweep"></div>
+  <!-- expanding cryo-core pulse rings, very faint -->
+  <div class="pulse-ring pr-1"></div>
+  <div class="pulse-ring pr-2"></div>
   <div class="core-text">
     <div class="core-line-1">HUMAN LIMIT</div>
     <div class="core-line-2">// UNKNOWN //</div>
@@ -151,6 +154,12 @@
       <div class="meter warn"><span id="m-san" style="width:14%"></span></div>
     </div>
 
+    <!-- live trace: rolling temperature sparkline -->
+    <canvas id="spark" class="spark" aria-hidden="true"></canvas>
+
+    <!-- live trace: mini environmental radar -->
+    <canvas id="radar" class="radar" aria-hidden="true"></canvas>
+
     <footer class="mod-foot">
       <span data-cfg="location">78°13'N</span>
       <span class="sep">·</span>
@@ -174,6 +183,9 @@
     </div>
 
     <div class="bars" id="bars"><!-- injected by script.js --></div>
+
+    <!-- live trace: cardiac sweep -->
+    <canvas id="ecg" class="ecg" aria-hidden="true"></canvas>
 
     <p class="footnote" data-cfg="footnote">Baseline human values may no longer apply.</p>
   </section>
