@@ -31,6 +31,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Stamp build id into asset URLs
+        run: |
+          set -euo pipefail
+          # Cloudflare serves CSS/JS with max-age=14400 on custom domains, and
+          # a `_headers` override does not take effect there. So a browser that
+          # loaded the site before a deploy keeps the old page for hours.
+          #
+          # Append the commit SHA as a query string: the URL changes on every
+          # deploy, which is exactly what a browser cache keys on. The 4h
+          # max-age then works in our favour instead of against us.
+          #
+          # This runs BEFORE the asset check below, because that check resolves
+          # each href/src against the filesystem and "?v=..." is not a filename.
+          BUILD="${GITHUB_SHA:0:8}"
+          sed -i "s/__BUILD__/$BUILD/g" bg/index.html
+          if grep -q "__BUILD__" bg/index.html; then
+            echo "::error::unreplaced __BUILD__ placeholder left in bg/index.html"
+            exit 1
+          fi
+          echo "Stamped build $BUILD"
+          grep -oE '(href|src)="[^"]*\?v=[^"]*"' bg/index.html
+
       - name: Validate the site is actually servable
         run: |
           set -euo pipefail
@@ -49,32 +71,14 @@ jobs:
           test -f "$SITE/_headers"   || { echo "::error::bg/_headers missing — assets will be cached for 4h and edits will appear stale"; exit 1; }
 
           # Every referenced asset must exist, or OBS shows a bare page.
+          # Strip any ?v=... before hitting the filesystem.
           cd "$SITE"
           for f in $(grep -oE '(href|src)="[^"]+"' index.html \
-                     | sed -E 's/.*="([^"]+)"/\1/' | grep -v '^https\?:'); do
+                     | sed -E 's/.*="([^"]+)"/\1/' \
+                     | sed 's/?v=.*$//' | grep -v '^https\?:'); do
             test -e "$f" || { echo "::error::index.html references missing file: $f"; exit 1; }
           done
           echo "All referenced assets present in $SITE/"
-
-      - name: Stamp build id into asset URLs
-        run: |
-          set -euo pipefail
-          # Cloudflare serves CSS/JS with max-age=14400 on custom domains, and
-          # a `_headers` override does not take effect there. So a browser that
-          # loaded the site before a deploy keeps the old page for hours.
-          #
-          # Append the commit SHA as a query string: the URL changes on every
-          # deploy, which is exactly what a browser cache keys on. The 4h
-          # max-age then works in our favour instead of against us.
-          BUILD="${GITHUB_SHA:0:8}"
-          sed -i "s/__BUILD__/$BUILD/g" bg/index.html
-          grep -q "__BUILD__" bg/index.html && {
-            echo "::error::unreplaced __BUILD__ placeholder left in bg/index.html"
-            exit 1
-          }
-          echo "Stamped build $BUILD"
-          grep -oE '(href|src)="[^"]+__BUILD__[^"]*"' bg/index.html || \
-            grep -oE '(href|src)="[^"]*\?v=[^"]*"' bg/index.html
 
       - name: Parse JS (fail fast on syntax errors)
         run: node --check bg/config.js && node --check bg/script.js
