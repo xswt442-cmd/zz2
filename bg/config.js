@@ -6,7 +6,10 @@
 
 window.CONFIG = {
   /* ---- identity ---------------------------------------------------------- */
-  streamerName: "冰点凝冻",
+  /* streamerName is intentionally left blank. The brand slot renders two
+     random lines from streamerLines below instead, on their own schedule.
+     Set a value here to pin a fixed name; leave "" for the random rotation. */
+  streamerName: "",
   streamerHandle: "ICEPOINT",
   facilityName: "HUMAN LIMIT FACILITY",
   facilitySector: "SECTOR FROST-09",
@@ -18,6 +21,32 @@ window.CONFIG = {
   location: "78°13'N",
   coordinates: "78°13'N 165°42'E",
   station: "ANTARCTIC STATION K-9",
+
+  /* ---- rotating brand lines ---------------------------------------------
+     Two lines shown in the identity plate (and mirrored in the subject row).
+     Picked at random, never adjacent repeats, and re-rolled slowly. Purely
+     decorative: the joke register and the log carry the voice. */
+  streamerLines: [
+    ["PROTOCOL SUBJECT", "HUMAN LIMIT STUDY"],
+    ["ANOMALY INDEX", "REMAINS UNCLASSIFIED"],
+    ["SUBJECT DESIGNATION", "PENDING REVIEW"],
+    ["OBSERVATION WINDOW", "CONTINUOUS / NO END"],
+    ["TEST PARAMETER", "NOT DISCLOSED"],
+    ["RESEARCH OBJECTIVE", "SEE FILE 0047"],
+    ["ATTEMPT NUMBER", "LOST COUNT"],
+    ["DATA CONFIDENCE", "MODERATE TO NONE"],
+    ["CANDIDATE POOL", "ONE (1)"],
+    ["SELECTION CRITERIA", "AVAILABILITY"],
+    ["BASELINE BEHAVIOUR", "UNOBSERVABLE"],
+    ["COMPARISON GROUP", "PROPOSED ONLY"],
+    ["OUTCOME STATUS", "PENDING REVIEW"],
+    ["STOPPING CONDITION", "NONE SUPPLIED"],
+    ["ETHICS REVIEW", "DEFERRED"],
+    ["EQUIPMENT ISSUED", "ONE HOODIE"],
+    ["CALIBRATION DATE", "LONG AGO"],
+    ["MONITORING CADENCE", "WHEN CONVENIENT"]
+  ],
+  streamerLineSwapMs: [26000, 48000],
 
   /* ---- telemetry seed ---------------------------------------------------- */
   temperature: -47.3,
@@ -112,5 +141,48 @@ window.CONFIG = {
   /* ---- behaviour --------------------------------------------------------- */
   logIntervalMs: [6000, 11000],   // random range between log lines
   anomalySwapMs: [13000, 19000],  // random range between anomaly swaps
-  warningCooldownMs: 150000       // min gap between warning flashes
+  warningCooldownMs: 150000,      // min gap between warning flashes
+
+  /* ---- chamber filler ---------------------------------------------------
+     Instrument-grade text scattered through the middle band. This exists so
+     the centre does not read as empty black once gameplay is not covering
+     it — the data density of a real control room, not decoration.
+
+     Kept at very low opacity: it must sit BEHIND whatever the stream puts
+     on top. Nothing here animates position; only the occasional value tick. */
+  chamberData: {
+    /* left rail: a vertical stack of static-looking readouts */
+    leftRail: [
+      ["CH-01", "SEALED"],
+      ["CH-02", "SEALED"],
+      ["CH-03", "DORMANT"],
+      ["CH-04", "DORMANT"],
+      ["CH-05", "PURGED"],
+      ["CH-06", "LOCKED"]
+    ],
+    /* per-channel trace rows; the small bar is a static width per channel */
+    channels: [
+      ["CRYO-A", 34], ["CRYO-B", 51], ["CRYO-C", 22], ["CRYO-D", 68],
+      ["CRYO-E", 40], ["CRYO-F", 77], ["CRYO-G", 29], ["CRYO-H", 63],
+      ["CRYO-I", 45], ["CRYO-J", 81], ["CRYO-K", 36], ["CRYO-L", 58]
+    ],
+    /* short lines that read as clipped telemetry output */
+    traces: [
+      "ΔT 0.004 / h",
+      "P 101.32 kPa",
+      "O₂ 20.9%",
+      "N₂ 78.1%",
+      "RH 11%",
+      "V 0.02 m/s",
+      "H 4,182 M",
+      "T 216.65 K",
+      "PWR 0.44 kW",
+      "ψ 0.19 W/mK"
+    ],
+    /* reference codes along the frame edges */
+    stamps: [
+      "REF 0047-B", "DOC 11-A", "REV 04", "SH 0.34",
+      "Σ 0.88", "Δ 1.02", "Φ 0.51", "Ω 0.77"
+    ]
+  }
 };

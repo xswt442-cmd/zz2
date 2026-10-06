@@ -72,6 +72,8 @@
     lastLog: 0,
     lastAnom: 0,
     lastWarn: 0,
+    lastBrand: 0,
+    nextBrandAt: 0,
     nextLogAt: 0,
     nextAnomAt: 0,
     eggsFired: {}
@@ -98,6 +100,120 @@
     setText($('v-san'), String(C.sanity));
     setStyle($('m-load'), 'width', C.systemLoad + '%');
     setStyle($('m-san'), 'width', C.sanity + '%');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     1b. CHAMBER FILLER — instrument text through the middle band
+     Built once. These nodes never change; the CSS handles the rest.
+     ══════════════════════════════════════════════════════════════════ */
+
+  function buildChamber() {
+    var d = C.chamberData;
+    if (!d) return;
+
+    // left rail
+    var left = $('ch-left');
+    if (left && d.leftRail) {
+      d.leftRail.forEach(function (pair) {
+        var row = document.createElement('div');
+        row.className = 'row';
+        var k = document.createElement('span'); k.className = 'k'; k.textContent = pair[0];
+        var v = document.createElement('span'); v.className = 'v'; v.textContent = pair[1];
+        row.appendChild(k); row.appendChild(v);
+        left.appendChild(row);
+      });
+    }
+
+    // right rail, reversed
+    var right = $('ch-right');
+    if (right && d.leftRail) {
+      d.leftRail.forEach(function (pair) {
+        var row = document.createElement('div');
+        row.className = 'row';
+        var v = document.createElement('span'); v.className = 'v'; v.textContent = pair[1];
+        var k = document.createElement('span'); k.className = 'k'; k.textContent = pair[0];
+        row.appendChild(v); row.appendChild(k);
+        right.appendChild(row);
+      });
+    }
+
+    // channel bank
+    var ch = $('ch-channels');
+    if (ch && d.channels) {
+      d.channels.forEach(function (pair) {
+        var row = document.createElement('div');
+        row.className = 'ch-row';
+        var k = document.createElement('span'); k.className = 'k'; k.textContent = pair[0];
+        var bar = document.createElement('span'); bar.className = 'bar';
+        var fill = document.createElement('i');
+        fill.style.width = pair[1] + '%';
+        bar.appendChild(fill);
+        var n = document.createElement('span'); n.className = 'n'; n.textContent = pair[1];
+        row.appendChild(k); row.appendChild(bar); row.appendChild(n);
+        ch.appendChild(row);
+      });
+    }
+
+    // traces + stamps are positioned purely by CSS nth-child
+    var tr = $('ch-traces');
+    if (tr && d.traces) {
+      d.traces.forEach(function (t) {
+        var s = document.createElement('span');
+        s.textContent = t;
+        tr.appendChild(s);
+      });
+    }
+
+    var st = $('ch-stamps');
+    if (st && d.stamps) {
+      d.stamps.forEach(function (t) {
+        var s = document.createElement('span');
+        s.textContent = t;
+        st.appendChild(s);
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     1c. ROTATING BRAND LINES
+     Two random lines in the identity plate, re-rolled on a slow cycle.
+     Never shows the same pair twice in a row.
+     ══════════════════════════════════════════════════════════════════ */
+
+  var brandPair = null;
+
+  function pickBrand() {
+    var pool = C.streamerLines;
+    if (!pool || !pool.length) return null;
+    var next;
+    do { next = pick(pool); } while (brandPair && next === brandPair);
+    return next;
+  }
+
+  function writeBrand(pair) {
+    brandPair = pair;
+    if (!pair) return;
+    setText($('brand-a'), pair[0]);
+    setText($('brand-b'), pair[1]);
+    setText($('subj-alt'), pair[0]);
+  }
+
+  function tickBrand(now) {
+    if (now < state.nextBrandAt) return;
+    var r = C.streamerLineSwapMs;
+    var base = r[0] + Math.random() * (r[1] - r[0]);
+    state.nextBrandAt = now + clamp(base / (0.6 + motion * 0.6), 8000, 70000);
+
+    var next = pickBrand();
+    if (!next) return;
+
+    // fade out, swap text, fade back in
+    var nodes = [$('brand-a'), $('brand-b'), $('subj-alt')];
+    nodes.forEach(function (n) { if (n) n.classList.add('swapping'); });
+    setTimeout(function () {
+      writeBrand(next);
+      nodes.forEach(function (n) { if (n) n.classList.remove('swapping'); });
+    }, 520);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -541,6 +657,7 @@
     // --- log + anomalies + eggs + session clock ---
     tickLog(ts);
     tickAnomalies(ts);
+    tickBrand(ts);
     checkEggs();
     maybeWarn(ts);
     tickSession();
@@ -630,6 +747,8 @@
 
   function init() {
     bindStatic();
+    writeBrand(pickBrand());
+    buildChamber();
     buildBars();
     buildAnomalies();
     initGrain();

@@ -190,6 +190,147 @@ body::before {
 }
 
 
+/* ==========================================================================
+   CHAMBER FILLER
+   Instrument text scattered through the middle band.
+
+   Purpose: the centre of a 16:9 stream is often NOT covered — without this
+   it reads as a dead black rectangle. This gives it the density of real
+   equipment telemetry while staying far below the HUD in contrast.
+
+   Rules that keep it from becoming visual noise:
+   · everything is opacity 0.16–0.34, nothing above that
+   · no colour brighter than --c-ice-deep
+   · nothing animates position; only opacity, and only on a slow cycle
+   · it all sits under z8+ scanlines, so the CRT pass mutes it uniformly
+   ========================================================================== */
+
+.chamber { z-index: 5; }
+
+.ch {
+  position: absolute;
+  font-size: 0.5rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-ice-deep);
+  line-height: 1.9;
+  white-space: nowrap;
+}
+
+/* ── left rail: a vertical column of chamber states ── */
+.ch-left {
+  left: calc(var(--pad) + 25.5rem);
+  top: 15%;
+  height: 70%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  opacity: 0.3;
+}
+.ch-right {
+  right: calc(var(--pad) + 20.5rem);
+  top: 17%;
+  height: 66%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  text-align: right;
+  opacity: 0.24;
+}
+.ch-left .row, .ch-right .row { display: flex; gap: 0.5rem; }
+.ch-right .row { justify-content: flex-end; }
+.ch-left .k, .ch-right .k { color: var(--c-line-hi); }
+.ch-left .v, .ch-right .v { color: var(--c-ice-deep); }
+.ch-right .v { color: var(--c-amber-dim); }
+
+/* ── channel traces: a small bank of labelled bars ── */
+.ch-channels {
+  top: 9.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 0.3rem 2.2rem;
+  opacity: 0.26;
+}
+.ch-channels .ch-row {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 0.46rem;
+}
+.ch-channels .k { color: var(--c-line-hi); }
+.ch-channels .bar {
+  width: 3.4rem; height: 2px;
+  background: rgba(27,38,46,0.9);
+  position: relative;
+}
+.ch-channels .bar i {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  background: var(--c-ice-deep);
+}
+.ch-channels .n {
+  color: var(--c-ice-deep);
+  font-variant-numeric: tabular-nums;
+  width: 1.5rem; text-align: right;
+}
+
+/* ── scattered trace values, positioned by nth-child ── */
+.ch-traces { inset: 0; }
+.ch-traces span {
+  position: absolute;
+  color: var(--c-ice-deep);
+  opacity: 0.22;
+  font-size: 0.46rem;
+  letter-spacing: 0.26em;
+}
+.ch-traces span:nth-child(1) { left: 34%;  top: 16%; }
+.ch-traces span:nth-child(2) { left: 37%;  top: 22.5%; }
+.ch-traces span:nth-child(3) { left: 33.5%;top: 29%; }
+.ch-traces span:nth-child(4) { left: 63%;  top: 18%; }
+.ch-traces span:nth-child(5) { left: 66%;  top: 24.5%; }
+.ch-traces span:nth-child(6) { left: 62.5%;top: 31%; }
+.ch-traces span:nth-child(7) { left: 35%;  top: 71%; }
+.ch-traces span:nth-child(8) { left: 38%;  top: 77.5%; }
+.ch-traces span:nth-child(9) { left: 64%;  top: 73%; }
+.ch-traces span:nth-child(10){ left: 67%;  top: 79.5%; }
+
+/* ── reference stamps hugging the frame ── */
+.ch-stamps { inset: 0; }
+.ch-stamps span {
+  position: absolute;
+  font-size: 0.44rem;
+  letter-spacing: 0.3em;
+  color: var(--c-line-hi);
+  opacity: 0.4;
+}
+.ch-stamps span:nth-child(1) { top: 6.2%;  left: 6%; }
+.ch-stamps span:nth-child(2) { top: 6.2%;  right: 6%; }
+.ch-stamps span:nth-child(3) { bottom: 6.2%; left: 26%; }
+.ch-stamps span:nth-child(4) { bottom: 6.2%; right: 24%; }
+.ch-stamps span:nth-child(5) { top: 46%;   left: 4.5%; }
+.ch-stamps span:nth-child(6) { top: 46%;   right: 4.5%; }
+
+/* ── measurement grid: barely-there structure across the whole chamber ── */
+.ch-grid {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(90deg, rgba(45,84,104,0.10) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(45,84,104,0.10) 1px, transparent 1px);
+  background-size: 8rem 8rem;
+  mask-image: radial-gradient(ellipse 62% 58% at 50% 50%,
+              #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 50%,
+              #000 0%, transparent 78%);
+  opacity: 0.5;
+}
+
+/* very slow breathing on the whole filler — one cycle per ~2 minutes */
+.chamber { animation: chamber-breathe calc(140s / var(--motion)) ease-in-out infinite alternate; }
+@keyframes chamber-breathe {
+  from { opacity: 0.86; }
+  to   { opacity: 1; }
+}
+
+
 /* --- central cryo-core mark: buried under everything --------------------- */
 /* opacity here is intentionally very low. The mark must read as something
    half-seen through ice, never as a foreground graphic competing with the
@@ -387,14 +528,26 @@ body::before {
 
 .plate-name {
   margin-top: 0.75rem;
-  font-family: var(--f-sans);
-  font-size: 1.65rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-family: var(--f-mono);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.26em;
   color: var(--c-white);
-  line-height: 1.1;
+  line-height: 1.55;
+  min-height: 1.2rem;
   text-shadow: 0 0 1.4rem rgba(127,200,232,0.14);
 }
+/* second line sits a notch back so the pair reads as one block */
+.plate-name.alt {
+  font-size: 0.66rem;
+  color: var(--c-ice-dim);
+  letter-spacing: 0.3em;
+  margin-top: 0.1rem;
+  text-shadow: none;
+}
+/* swap animation: brief fade through zero, then the new line */
+.plate-name, .subj-id .name { transition: opacity 0.5s ease; }
+.plate-name.swapping, .subj-id .name.swapping { opacity: 0; }
 
 .plate-sub {
   margin-top: 0.42rem;
@@ -581,12 +734,13 @@ body::before {
 }
 .subj-id .dim { color: var(--c-text-dim); }
 .subj-id .name {
-  font-family: var(--f-sans);
-  font-size: 0.92rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0.18em;
   color: var(--c-white);
-  text-transform: none;
+  text-transform: uppercase;
+  min-width: 7.5rem;
 }
 .subj-id .tag {
   margin-left: auto;

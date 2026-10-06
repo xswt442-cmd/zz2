@@ -32,7 +32,19 @@
   </svg>
 </div>
 
-<!-- z3  central cryo-core mark. very low opacity. sits UNDER everything else. -->
+<!-- z4  chamber filler: instrument text scattered through the middle band.
+     Gives the centre texture without competing with stream content laid on top.
+     Everything here is pointer-events:none and very low contrast. -->
+<div class="layer chamber" aria-hidden="true">
+  <div class="ch ch-left" id="ch-left"></div>
+  <div class="ch ch-right" id="ch-right"></div>
+  <div class="ch ch-channels" id="ch-channels"></div>
+  <div class="ch ch-traces" id="ch-traces"></div>
+  <div class="ch ch-stamps" id="ch-stamps"></div>
+  <div class="ch-grid"></div>
+</div>
+
+<!-- z5  central cryo-core mark. very low opacity. sits UNDER everything else. -->
 <div class="layer core-mark" aria-hidden="true">
   <svg viewBox="0 0 600 600">
     <defs>
@@ -87,7 +99,9 @@
         <span class="txt dim" data-cfg="facilityName">HUMAN LIMIT FACILITY</span>
       </div>
 
-      <div class="plate-name" data-cfg="streamerName">冰点凝冻</div>
+      <div class="plate-name" data-cfg="streamerName"></div>
+      <div class="plate-name" id="brand-a"></div>
+      <div class="plate-name alt" id="brand-b"></div>
       <div class="plate-sub" data-cfg="subtitle">CRYOGENIC HUMAN PERFORMANCE TEST</div>
 
       <div class="plate-meta">
@@ -154,7 +168,8 @@
 
     <div class="subj-id">
       <span class="dim">SUBJECT</span>
-      <span class="name" data-cfg="streamerName">冰点凝冻</span>
+      <span class="name" data-cfg="streamerName"></span>
+      <span class="name" id="subj-alt"></span>
       <span class="tag" data-cfg="subjectId">SUBJECT_001</span>
     </div>
 
