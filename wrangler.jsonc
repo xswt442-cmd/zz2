@@ -8,6 +8,12 @@
   // The project name here MUST match the project you create in the
   // Cloudflare dashboard, otherwise wrangler creates a second one.
   //
+  // This project is "zz2" in the dashboard, where it serves:
+  //   zz2.xswt.fyi        <- custom domain, use this in OBS
+  //   zz2-e2m.pages.dev   <- assigned Pages hostname
+  // The bare "zz2.pages.dev" belongs to someone else and answers 301, which
+  // is why CI verifies against the custom domain instead.
+  //
   // CI reads account/token from CF_ACCOUNT_ID / CF_TOKEN (GitHub secrets),
   // so no auth block is committed on purpose — never commit a token.
   "$schema": "node_modules/wrangler/config-schema.json",

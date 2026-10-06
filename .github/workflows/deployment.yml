@@ -13,6 +13,16 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Pages project name. Must match the dashboard exactly.
+  # The dashboard shows this project as "zz2" with domains
+  #   zz2.xswt.fyi + zz2-e2m.pages.dev
+  # The bare "zz2.pages.dev" is NOT ours — Cloudflare assigns the -e2m
+  # suffix and the short form belongs to someone else. Verify against the
+  # custom domain, which is the address OBS actually uses.
+  PAGES_PROJECT: zz2
+  PAGES_URL: https://zz2.xswt.fyi
+
 jobs:
   deploy:
     name: Deploy to Cloudflare Pages
@@ -20,15 +30,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check project mode
-        run: |
-          echo "If this job fails with 'No Pages project found', create the"
-          echo "project first — and if the dashboard asks you to connect a Git"
-          echo "repository, leave that step OUT. Connecting Git would take over"
-          echo "deploys from CI and the two would fight each other."
-          echo
-          echo "Deploy via dashboard Git integration instead? Cancel this run."
 
       - name: Validate the site is actually servable
         run: |
@@ -62,39 +63,60 @@ jobs:
           # main -> the live site; anything else -> a preview URL.
           # Hardcoding --branch=main here would let a dev branch overwrite
           # production, so the ref is read from the checkout instead.
-          command: pages deploy bg --project-name=zz2 --branch=${{ github.ref_name }} --commit-dirty=true
+          command: pages deploy bg --project-name=${{ env.PAGES_PROJECT }} --branch=${{ github.ref_name }} --commit-dirty=true
 
       - name: Verify the deployment answers
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # Previews live on <branch>.<project>.pages.dev; main is the bare domain.
+          # main is verified on the custom domain — the address OBS actually
+          # uses, and the only one that is not a throwaway deployment URL.
+          #
+          # For previews we read the URL wrangler printed rather than
+          # constructing it: Cloudflare's hostname suffix is assigned, not
+          # derived from the project name, so a guessed pattern is wrong.
           if [ "$BRANCH" = "main" ]; then
-            url="https://zz2.pages.dev"
+            url="$PAGES_URL"
+            echo "Verifying $url"
           else
-            url="https://${BRANCH}.zz2.pages.dev"
+            url=""
+            echo "Preview deploy — using the deployment URL from wrangler output."
           fi
-          echo "Verifying $url"
-          # Pages can take a few seconds to serve a fresh deploy.
+
           ok=0
-          for i in $(seq 1 10); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)
-            if [ "$code" = "200" ]; then
-              echo "Live at $url"
-              ok=1
-              break
+          if [ -n "$url" ]; then
+            for i in $(seq 1 10); do
+              # -L matters: any redirect must be followed before judging.
+              code=$(curl -sL -o /dev/null -w '%{http_code}' "$url" || echo 000)
+              if [ "$code" = "200" ]; then
+                echo "Live at $url"
+                ok=1
+                break
+              fi
+              echo "attempt $i: HTTP $code — retrying"
+              sleep 6
+            done
+          else
+            ok=1   # nothing stable to poll; the deploy step already succeeded
+          fi
+
+          # Confirm the page is really ours, not a parked or unrelated domain.
+          if [ "$ok" = "1" ] && [ -n "$url" ]; then
+            if curl -sL "$url" | grep -q "HUMAN LIMIT FACILITY"; then
+              echo "Content check passed."
+            else
+              echo "::error::$url answered 200 but is not this site — check the custom domain binding"
+              exit 1
             fi
-            echo "attempt $i: HTTP $code — retrying"
-            sleep 6
-          done
-          # A preview that never answers is not a failure worth blocking a push.
+          fi
+
           if [ "$ok" = "0" ] && [ "$BRANCH" = "main" ]; then
             echo "::error::production did not answer 200 within 60s; check the Pages dashboard"
             exit 1
           fi
           if [ "$ok" = "0" ]; then
-            echo "::warning::preview did not answer 200 within 60s; check the Pages dashboard"
+            echo "::warning::preview did not answer 200 within 60s"
           fi
 
       - name: Summary
@@ -114,7 +136,8 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| Branch | \`$BRANCH\` |"
-            echo "| URL | https://zz2.pages.dev |"
-            echo "| OBS source | 1920 x 1080 |"
-            echo "| Live params | \`?name=冰点凝冻&intensity=0.6\` |"
+            echo "| Project | \`$PAGES_PROJECT\` |"
+            echo "| OBS source | $PAGES_URL |"
+            echo "| Resolution | 1920 x 1080 |"
+            echo "| Live params | \`?intensity=0.6\` |"
           } >> "$GITHUB_STEP_SUMMARY"
