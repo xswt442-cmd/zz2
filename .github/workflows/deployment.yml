@@ -1,14 +1,13 @@
-name: Deploy
+name: Deployment
 
-# Only main deploys. No preview builds — a live background page has one
-# address (the OBS source), so branch previews would just add churn.
+# Every push deploys: main becomes the live site, other branches get a
+# preview URL. `--branch` below tells Cloudflare which is which.
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: pages-deploy
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -55,36 +54,66 @@ jobs:
       - name: Parse JS (fail fast on syntax errors)
         run: node --check bg/config.js && node --check bg/script.js
 
-      - uses: cloudflare/wrangler-action@v3
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy bg --project-name=zz2 --branch=main --commit-dirty=true
+          # main -> the live site; anything else -> a preview URL.
+          # Hardcoding --branch=main here would let a dev branch overwrite
+          # production, so the ref is read from the checkout instead.
+          command: pages deploy bg --project-name=zz2 --branch=${{ github.ref_name }} --commit-dirty=true
 
       - name: Verify the deployment answers
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          url="https://zz2.pages.dev"
+          # Previews live on <branch>.<project>.pages.dev; main is the bare domain.
+          if [ "$BRANCH" = "main" ]; then
+            url="https://zz2.pages.dev"
+          else
+            url="https://${BRANCH}.zz2.pages.dev"
+          fi
+          echo "Verifying $url"
           # Pages can take a few seconds to serve a fresh deploy.
+          ok=0
           for i in $(seq 1 10); do
             code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)
             if [ "$code" = "200" ]; then
               echo "Live at $url"
-              exit 0
+              ok=1
+              break
             fi
             echo "attempt $i: HTTP $code — retrying"
             sleep 6
           done
-          echo "::warning::deployment did not answer 200 within 60s; check the Pages dashboard"
+          # A preview that never answers is not a failure worth blocking a push.
+          if [ "$ok" = "0" ] && [ "$BRANCH" = "main" ]; then
+            echo "::error::production did not answer 200 within 60s; check the Pages dashboard"
+            exit 1
+          fi
+          if [ "$ok" = "0" ]; then
+            echo "::warning::preview did not answer 200 within 60s; check the Pages dashboard"
+          fi
 
       - name: Summary
         if: always()
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
           {
-            echo "### Deploy"
+            echo "### Deployment"
+            echo ""
+            if [ "$BRANCH" = "main" ]; then
+              echo "Production deploy of \`$BRANCH\` — this is the live OBS source."
+            else
+              echo "Preview deploy of \`$BRANCH\` — production is untouched."
+            fi
             echo ""
             echo "| | |"
             echo "|---|---|"
+            echo "| Branch | \`$BRANCH\` |"
             echo "| URL | https://zz2.pages.dev |"
             echo "| OBS source | 1920 x 1080 |"
             echo "| Live params | \`?name=冰点凝冻&intensity=0.6\` |"
