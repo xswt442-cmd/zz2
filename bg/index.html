@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICEPOINT // HUMAN LIMIT FACILITY</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ══════════════ BACKGROUND LAYERS ══════════════ -->
+<!-- z0  base gradient + drifting fog -->
+<div class="layer fog" aria-hidden="true">
+  <div class="fog-a"></div>
+  <div class="fog-b"></div>
+  <div class="fog-c"></div>
+</div>
+
+<!-- z1  frost crystal grain (canvas, low fps) -->
+<canvas id="grain" class="layer grain" aria-hidden="true"></canvas>
+
+<!-- z2  isotherm contours (svg, css-animated) -->
+<div class="layer contours" aria-hidden="true">
+  <svg viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+    <g fill="none" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+      <circle cx="500" cy="500" r="180" class="ct ct-1"/>
+      <circle cx="500" cy="500" r="260" class="ct ct-2"/>
+      <circle cx="500" cy="500" r="345" class="ct ct-3"/>
+      <circle cx="500" cy="500" r="430" class="ct ct-4"/>
+      <circle cx="500" cy="500" r="515" class="ct ct-5"/>
+    </g>
+  </svg>
+</div>
+
+<!-- z3  central cryo-core mark. very low opacity. sits UNDER everything else. -->
+<div class="layer core-mark" aria-hidden="true">
+  <svg viewBox="0 0 600 600">
+    <defs>
+      <radialGradient id="coreGrad" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#8fd8ff" stop-opacity="0.16"/>
+        <stop offset="45%"  stop-color="#5aa8cc" stop-opacity="0.06"/>
+        <stop offset="100%" stop-color="#0a1418" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle cx="300" cy="300" r="280" fill="url(#coreGrad)"/>
+    <!-- hex chamber structure -->
+    <g fill="none" stroke="#7fc8e8" stroke-width="1.1">
+      <polygon points="300,90 510,195 510,405 300,510 90,405 90,195" class="hex hex-1"/>
+      <polygon points="300,150 455,228 455,372 300,450 145,372 145,228" class="hex hex-2"/>
+      <polygon points="300,210 400,262 400,338 300,390 200,338 200,262" class="hex hex-3"/>
+    </g>
+    <!-- crosshair ticks -->
+    <g stroke="#7fc8e8" stroke-width="1" opacity="0.5">
+      <line x1="300" y1="60"  x2="300" y2="104"/>
+      <line x1="300" y1="496" x2="300" y2="540"/>
+      <line x1="60"  y1="300" x2="104" y2="300"/>
+      <line x1="496" y1="300" x2="540" y2="300"/>
+    </g>
+  </svg>
+  <div class="core-sweep"></div>
+  <div class="core-text">
+    <div class="core-line-1">HUMAN LIMIT</div>
+    <div class="core-line-2">// UNKNOWN //</div>
+  </div>
+</div>
+
+<!-- z4  scanlines + vignette + corner frost. pure css, no repaint. -->
+<div class="layer scanlines" aria-hidden="true"></div>
+<div class="layer sweep" aria-hidden="true"></div>
+<div class="layer vignette" aria-hidden="true"></div>
+<div class="layer frost" aria-hidden="true"></div>
+
+
+<!-- ══════════════ HUD ══════════════ -->
+<div class="hud">
+
+  <!-- ── TOP LEFT : identity plate ── -->
+  <section class="panel tl" aria-label="Facility identity">
+    <div class="plate">
+      <div class="plate-corner tl"></div><div class="plate-corner tr"></div>
+      <div class="plate-corner bl"></div><div class="plate-corner br"></div>
+
+      <div class="plate-line-1">
+        <span class="glyph"></span>
+        <span class="txt" data-cfg="streamerHandle">ICEPOINT</span>
+        <span class="sep">//</span>
+        <span class="txt dim" data-cfg="facilityName">HUMAN LIMIT FACILITY</span>
+      </div>
+
+      <div class="plate-name" data-cfg="streamerName">冰点凝冻</div>
+      <div class="plate-sub" data-cfg="subtitle">CRYOGENIC HUMAN PERFORMANCE TEST</div>
+
+      <div class="plate-meta">
+        <span data-cfg="experimentId">CRYO-HL-001</span>
+        <span data-cfg="subjectId">SUBJECT_001</span>
+        <span data-cfg="protocol">HUMAN_LIMIT_OVERRIDE</span>
+      </div>
+
+      <div class="plate-status">
+        <span class="live"><i></i>SESSION ACTIVE</span>
+        <span class="dim">LIVE EXPERIMENT</span>
+        <span class="dim">AUTHORIZED PERSONNEL ONLY</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TOP RIGHT : environmental telemetry ── -->
+  <section class="panel tr" aria-label="Environmental telemetry">
+    <header class="mod-head">
+      <span class="mod-id">ENV.MON</span>
+      <h2>ENVIRONMENT</h2>
+      <span class="dot-amber" title="nominal"></span>
+    </header>
+
+    <div class="readout">
+      <div class="row">
+        <label>EXTERNAL TEMP</label>
+        <div class="val"><span id="v-temp">-47.3</span><i>°C</i></div>
+      </div>
+      <div class="row">
+        <label>WIND CHILL</label>
+        <div class="val cold"><span id="v-chill">-61.8</span><i>°C</i></div>
+      </div>
+      <div class="row">
+        <label>CORE STATUS</label>
+        <div class="val txt" id="v-core">STILL ALIVE</div>
+      </div>
+      <div class="row">
+        <label>SYSTEM LOAD</label>
+        <div class="val"><span id="v-load">97</span><i>%</i></div>
+      </div>
+      <div class="meter"><span id="m-load" style="width:97%"></span></div>
+      <div class="row">
+        <label>SANITY</label>
+        <div class="val"><span id="v-san">14</span><i>%</i></div>
+      </div>
+      <div class="meter warn"><span id="m-san" style="width:14%"></span></div>
+    </div>
+
+    <footer class="mod-foot">
+      <span data-cfg="location">78°13'N</span>
+      <span class="sep">·</span>
+      <span data-cfg="facilitySector">SECTOR FROST-09</span>
+    </footer>
+  </section>
+
+  <!-- ── BOTTOM LEFT : subject biometrics ── -->
+  <section class="panel bl" aria-label="Subject biometrics">
+    <header class="mod-head">
+      <span class="mod-id">BIO.SUBJ</span>
+      <h2>SUBJECT STATE</h2>
+      <span class="dot-red"></span>
+    </header>
+
+    <div class="subj-id">
+      <span class="dim">SUBJECT</span>
+      <span class="name" data-cfg="streamerName">冰点凝冻</span>
+      <span class="tag" data-cfg="subjectId">SUBJECT_001</span>
+    </div>
+
+    <div class="bars" id="bars"><!-- injected by script.js --></div>
+
+    <p class="footnote" data-cfg="footnote">Baseline human values may no longer apply.</p>
+  </section>
+
+  <!-- ── BOTTOM RIGHT : event log ── -->
+  <section class="panel br" aria-label="System event log">
+    <header class="mod-head">
+      <span class="mod-id">SYS://LOG</span>
+      <h2>EVENT LOG</h2>
+      <span class="dot-cyan"></span>
+    </header>
+
+    <div class="log" id="log"><!-- injected by script.js --></div>
+
+    <footer class="mod-foot">
+      <span class="rec"><i></i>REC</span>
+      <span id="v-session">SESSION</span>
+      <span class="sep">·</span>
+      <span id="v-env">ENV CRYO</span>
+      <span class="sep">·</span>
+      <span id="v-core-tag">CORE</span>
+    </footer>
+  </section>
+
+</div>
+
+<!-- ══════════════ EDGE FURNITURE ══════════════ -->
+<div class="edge-marks" aria-hidden="true">
+  <span class="em em-tl"></span><span class="em em-tr"></span>
+  <span class="em em-bl"></span><span class="em em-br"></span>
+</div>
+
+<!-- ══════════════ ANOMALY REGISTER (the jokes) ══════════════ -->
+<div class="anomaly-register" id="anomaly-register" aria-hidden="true">
+  <!-- injected by script.js: exactly 3 slots -->
+</div>
+
+<!-- hairline that ties the anomaly row into the panel language -->
+<div class="anomaly-rule" aria-hidden="true"></div>
+
+<!-- ══════════════ WARNING OVERLAY ══════════════ -->
+<div class="warn-overlay" id="warn-overlay" aria-hidden="true">
+  <span class="warn-box">WARNING: HUMAN LIMIT APPROACHING</span>
+</div>
+
+<!-- ══════════════ BOOT SEQUENCE ══════════════ -->
+<div class="boot" id="boot">
+  <div class="boot-inner">
+    <div class="boot-line" data-d="0">INITIALIZING CRYOGENIC SYSTEM...</div>
+    <div class="boot-line" data-d="1">CALIBRATING HUMAN LIMIT...</div>
+    <div class="boot-line" data-d="2">SAFETY SYSTEM...........DISABLED</div>
+    <div class="boot-line" data-d="3">COMMON SENSE............OFFLINE</div>
+    <div class="boot-line ok" data-d="4">STREAM CORE..............ONLINE</div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

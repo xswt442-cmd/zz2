@@ -1,0 +1,834 @@
+/* ==========================================================================
+   ICEPOINT // HUMAN LIMIT FACILITY
+   styles.css
+
+   Layout model
+   ------------
+   Everything is sized in `rem`. The root font-size is locked to a 16:9
+   virtual stage, so the whole HUD scales as one piece from 1280x720 up to
+   2560x1440+ without a single media query.
+
+   Animation policy
+   ----------------
+   Only `transform` and `opacity` are ever animated. No layout properties,
+   no filters on moving elements, no box-shadow animation. Fog and glow are
+   pre-rendered gradients that only ever move.
+
+   Cost control
+   ------------
+   No backdrop-filter. No large blurs. Panels get their "frozen glass"
+   quality from layered gradients + inset hairlines instead, which the
+   compositor handles on the GPU for free.
+   ========================================================================== */
+
+
+/* ── tokens ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* root scale: fit a 16:9 stage into whatever viewport we get.
+     NOTE: min() of two viewport units — NOT calc(min(vw/120, vh/67.5) * 1px).
+     calc() cannot multiply a length by a length, so that form is invalid CSS
+     and silently falls back to the 16px default, which happens to look correct
+     at exactly 1920x1080 and breaks everywhere else. */
+  font-size: min(0.833333vw, 1.481481vh);
+
+  /* near-black, never pure black */
+  --c-void:      #04070a;
+  --c-base:      #070b0f;
+  --c-base-hi:   #0b1116;
+
+  /* graphite / gunmetal */
+  --c-panel:     #0a1015;
+  --c-line:      #1b262e;
+  --c-line-hi:   #2a3a45;
+
+  /* glacier blue + cold cyan-white */
+  --c-ice:       #7fc8e8;
+  --c-ice-dim:   #4a7d94;
+  --c-ice-deep:  #2d5468;
+  --c-white:     #dff0f6;
+  --c-text:      #a8c4d2;
+  --c-text-dim:  #5c7684;
+
+  /* sparing alarm colours */
+  --c-red:       #b84a42;
+  --c-red-dim:   #6e2f2a;
+  --c-amber:     #b8873f;
+  --c-amber-dim: #6d5228;
+
+  /* motion — scaled at runtime by --motion */
+  --motion: 0.6;
+
+  /* type */
+  --f-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono",
+            Menlo, Consolas, "Liberation Mono", monospace;
+  --f-sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont,
+            "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* safe area — the empty middle the stream content sits in */
+  --pad: 2.6rem;
+}
+
+
+/* ── reset ────────────────────────────────────────────────────────────── */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--c-void);
+}
+
+body {
+  font-family: var(--f-mono);
+  color: var(--c-text);
+  -webkit-font-smoothing: antialiased;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* all layers share one positioning context */
+.layer {
+  position: fixed; inset: 0;
+  pointer-events: none;
+}
+
+
+/* ==========================================================================
+   BACKGROUND
+   ========================================================================== */
+
+/* --- base wash: never flat, subtle cold gradient from the top ----------- */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -10%, #0d151b 0%, transparent 60%),
+    radial-gradient(ellipse 90% 70% at 50% 110%, #060a0e 0%, transparent 55%),
+    linear-gradient(180deg, #080d11 0%, #05080b 45%, #04070a 100%);
+}
+
+/* --- drifting fog: 3 huge soft gradients, very slow, no blur filter ----- */
+.fog { z-index: 1; overflow: hidden; }
+.fog > div {
+  position: absolute;
+  width: 90vmax; height: 90vmax;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.fog-a {
+  top: -35vmax; left: -20vmax;
+  background: radial-gradient(circle at 50% 50%,
+              rgba(70,130,160,0.075) 0%,
+              rgba(50,100,125,0.035) 38%,
+              transparent 66%);
+  animation: drift-a calc(220s / var(--motion)) ease-in-out infinite alternate;
+}
+
+.fog-b {
+  bottom: -45vmax; right: -25vmax;
+  background: radial-gradient(circle at 50% 50%,
+              rgba(45,105,130,0.06) 0%,
+              rgba(35,80,100,0.028) 40%,
+              transparent 68%);
+  animation: drift-b calc(285s / var(--motion)) ease-in-out infinite alternate;
+}
+
+.fog-c {
+  top: 20vmax; left: 25vmax;
+  background: radial-gradient(circle at 50% 50%,
+              rgba(90,150,175,0.04) 0%,
+              transparent 60%);
+  animation: drift-c calc(340s / var(--motion)) ease-in-out infinite alternate;
+}
+
+@keyframes drift-a {
+  from { transform: translate3d(0,0,0) scale(1); }
+  to   { transform: translate3d(9vmax, 5vmax, 0) scale(1.12); }
+}
+@keyframes drift-b {
+  from { transform: translate3d(0,0,0) scale(1.08); }
+  to   { transform: translate3d(-11vmax, -6vmax, 0) scale(1); }
+}
+@keyframes drift-c {
+  from { transform: translate3d(0,0,0) scale(0.94); }
+  to   { transform: translate3d(-7vmax, 8vmax, 0) scale(1.1); }
+}
+
+/* --- frost crystal grain: canvas driven at low fps in script.js --------- */
+.grain { z-index: 2; opacity: 0.5; }
+
+/* --- isotherm contours -------------------------------------------------- */
+.contours {
+  z-index: 3;
+  color: var(--c-ice-deep);
+  display: grid; place-items: center;
+  opacity: 0.4;
+}
+.contours svg { width: 92vmin; height: 92vmin; will-change: transform; }
+
+.ct {
+  transform-origin: 500px 500px;
+  stroke-dasharray: 3 9;
+  animation: contour-spin calc(400s / var(--motion)) linear infinite;
+}
+.ct-1 { animation-duration: calc(520s / var(--motion)); opacity: 0.85; }
+.ct-2 { animation-duration: calc(470s / var(--motion)); animation-direction: reverse; opacity: 0.7; }
+.ct-3 { animation-duration: calc(610s / var(--motion)); opacity: 0.55; }
+.ct-4 { animation-duration: calc(560s / var(--motion)); animation-direction: reverse; opacity: 0.4; }
+.ct-5 { animation-duration: calc(700s / var(--motion)); opacity: 0.28; }
+
+/* slow breathing scale on the whole group */
+.contours svg { animation: contour-breathe calc(180s / var(--motion)) ease-in-out infinite alternate; }
+
+@keyframes contour-spin  { to { transform: rotate(360deg); } }
+@keyframes contour-breathe {
+  from { transform: scale(0.94); }
+  to   { transform: scale(1.06); }
+}
+
+
+/* --- central cryo-core mark: buried under everything --------------------- */
+/* opacity here is intentionally very low. The mark must read as something
+   half-seen through ice, never as a foreground graphic competing with the
+   stream content in the middle of the frame. */
+.core-mark {
+  z-index: 4;
+  display: grid; place-items: center;
+  opacity: 0.22;
+}
+.core-mark svg {
+  width: 62vmin; height: 62vmin;
+  position: relative; z-index: 1;
+  grid-area: 1 / 1;
+}
+
+/* The hex rings drift in and out of phase — barely perceptible.
+   Dashes are short and even: long dash gaps let the visible arc read as a
+   stray straight line rather than part of a ring. */
+.hex {
+  transform-origin: 300px 300px;
+  stroke-dasharray: 2 7;
+  opacity: 0.5;
+  animation: hex-turn calc(300s / var(--motion)) linear infinite;
+}
+.hex-2 { animation-duration: calc(380s / var(--motion)); animation-direction: reverse; opacity: 0.35; }
+.hex-3 { animation-duration: calc(500s / var(--motion)); opacity: 0.22; }
+
+@keyframes hex-turn { to { transform: rotate(-360deg); } }
+
+/* radar sweep across the core. absolute children need explicit centring —
+   they are pulled out of the grid flow and place-items does not reach them. */
+.core-sweep {
+  position: absolute;
+  top: 50%; left: 50%;
+  margin: -31vmin 0 0 -31vmin;
+  width: 62vmin; height: 62vmin;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    rgba(127,200,232,0.05) 0deg,
+    transparent 30deg,
+    transparent 360deg);
+  animation: sweep-turn calc(24s / var(--motion)) linear infinite;
+  will-change: transform;
+}
+@keyframes sweep-turn { to { transform: rotate(360deg); } }
+
+/* the two-line whisper in the middle of the frame */
+.core-text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 2;
+  opacity: 0.85;
+}
+.core-line-1 {
+  font-size: 1.15rem;
+  letter-spacing: 0.9em;
+  text-indent: 0.9em;
+  color: var(--c-ice-dim);
+  font-weight: 400;
+}
+.core-line-2 {
+  font-size: 0.62rem;
+  letter-spacing: 0.55em;
+  text-indent: 0.55em;
+  color: var(--c-ice-deep);
+  margin-top: 0.7rem;
+}
+
+
+/* --- scanlines: 3px repeating gradient, dead cheap --------------------- */
+.scanlines {
+  z-index: 8;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 2px,
+    rgba(0,0,0,0.16) 3px,
+    rgba(0,0,0,0) 4px
+  );
+  opacity: 0.55;
+}
+
+/* --- instrument sweep bar: one soft band crossing every ~40s ----------- */
+/* Kept below ~0.03 alpha. Anything stronger reads as a hard-edged geometric
+   shape crossing the frame instead of an instrument refreshing. */
+.sweep {
+  z-index: 7;
+  overflow: hidden;
+}
+.sweep::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 26%;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(127,200,232,0.008) 30%,
+    rgba(127,200,232,0.018) 50%,
+    rgba(127,200,232,0.008) 70%,
+    transparent 100%);
+  animation: sweep-pass calc(42s / var(--motion)) linear infinite;
+  will-change: transform;
+}
+@keyframes sweep-pass {
+  from { transform: translate3d(0, -120%, 0); }
+  to   { transform: translate3d(0, 560%, 0); }
+}
+
+/* --- vignette: pulls the eye to the centre, sells the "monitor" -------- */
+.vignette {
+  z-index: 9;
+  background:
+    radial-gradient(ellipse 78% 72% at 50% 50%,
+      transparent 42%,
+      rgba(2,4,6,0.32) 76%,
+      rgba(1,2,4,0.66) 100%);
+}
+
+/* --- corner frost: crystals creeping in from the edges ------------------ */
+.frost {
+  z-index: 10;
+  background:
+    radial-gradient(ellipse 42% 34% at 0% 0%,    rgba(127,200,232,0.035) 0%, transparent 62%),
+    radial-gradient(ellipse 42% 34% at 100% 0%,  rgba(127,200,232,0.030) 0%, transparent 62%),
+    radial-gradient(ellipse 42% 34% at 0% 100%,  rgba(127,200,232,0.028) 0%, transparent 62%),
+    radial-gradient(ellipse 42% 34% at 100% 100%,rgba(127,200,232,0.035) 0%, transparent 62%);
+}
+
+
+/* ==========================================================================
+   HUD SHELL — four corners, centre deliberately empty
+   ========================================================================== */
+
+.hud {
+  position: fixed; inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.panel { position: absolute; }
+
+/* generous gutters keep the middle of the frame clear for the stream */
+.tl { top: var(--pad); left: var(--pad); }
+.tr { top: var(--pad); right: var(--pad); }
+.bl { bottom: var(--pad); left: var(--pad); }
+.br { bottom: var(--pad); right: var(--pad); }
+
+
+/* ==========================================================================
+   TOP LEFT — identity plate
+   ========================================================================== */
+
+.plate {
+  position: relative;
+  padding: 1.15rem 1.5rem 1.05rem;
+  min-width: 27rem;
+  background:
+    linear-gradient(135deg, rgba(18,26,32,0.72) 0%, rgba(8,13,17,0.62) 100%);
+  border: 1px solid var(--c-line);
+  border-left: 2px solid var(--c-ice-deep);
+  box-shadow:
+    inset 0 1px 0 rgba(127,200,232,0.06),
+    inset 0 0 2.5rem rgba(0,0,0,0.5);
+}
+
+/* machined corner brackets */
+.plate-corner {
+  position: absolute;
+  width: 0.55rem; height: 0.55rem;
+  border: 1px solid var(--c-ice-dim);
+  opacity: 0.65;
+}
+.plate-corner.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.plate-corner.tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.plate-corner.bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.plate-corner.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+.plate-line-1 {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.24em;
+  color: var(--c-ice);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.plate-line-1 .glyph {
+  width: 0.42rem; height: 0.42rem;
+  background: var(--c-ice);
+  box-shadow: 0 0 0.4rem rgba(127,200,232,0.55);
+  flex: none;
+}
+.plate-line-1 .sep { color: var(--c-ice-deep); }
+
+.plate-name {
+  margin-top: 0.75rem;
+  font-family: var(--f-sans);
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--c-white);
+  line-height: 1.1;
+  text-shadow: 0 0 1.4rem rgba(127,200,232,0.14);
+}
+
+.plate-sub {
+  margin-top: 0.42rem;
+  font-size: 0.56rem;
+  letter-spacing: 0.28em;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+}
+
+.plate-meta {
+  margin-top: 0.85rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(27,38,46,0.9);
+  display: flex; gap: 1.1rem;
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  color: var(--c-ice-deep);
+  text-transform: uppercase;
+}
+.plate-meta span { white-space: nowrap; }
+
+.plate-status {
+  margin-top: 0.6rem;
+  display: flex; align-items: center; gap: 1.15rem;
+  font-size: 0.48rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.plate-status .dim { color: var(--c-text-dim); }
+
+.plate-status .live {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  color: var(--c-red);
+  padding-right: 1.15rem;
+  border-right: 1px solid var(--c-line);
+}
+.plate-status .live i {
+  width: 0.34rem; height: 0.34rem;
+  border-radius: 50%;
+  background: var(--c-red);
+  animation: pulse calc(3.4s / var(--motion)) ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0.35rem rgba(184,74,66,0.6); }
+  50%      { opacity: 0.28; box-shadow: 0 0 0.1rem rgba(184,74,66,0.2); }
+}
+
+
+/* ==========================================================================
+   MODULE CHROME — shared by TR / BL / BR
+   ========================================================================== */
+
+.mod-head {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  padding-bottom: 0.42rem;
+  margin-bottom: 0.62rem;
+  border-bottom: 1px solid var(--c-line);
+}
+.mod-head .mod-id {
+  font-size: 0.46rem;
+  letter-spacing: 0.16em;
+  color: var(--c-ice-deep);
+  text-transform: uppercase;
+}
+.mod-head h2 {
+  font-size: 0.6rem;
+  font-weight: 400;
+  letter-spacing: 0.3em;
+  color: var(--c-ice);
+  text-transform: uppercase;
+  flex: 1;
+}
+
+/* status LEDs */
+.dot-cyan, .dot-red, .dot-amber {
+  width: 0.32rem; height: 0.32rem;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
+}
+.dot-cyan  { background: var(--c-ice-dim); animation: pulse calc(5s / var(--motion)) ease-in-out infinite; }
+.dot-red   { background: var(--c-red);   animation: pulse calc(2.6s / var(--motion)) ease-in-out infinite; }
+.dot-amber { background: var(--c-amber); animation: pulse calc(7s / var(--motion)) ease-in-out infinite; }
+
+.mod-foot {
+  margin-top: 0.6rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(27,38,46,0.75);
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.46rem;
+  letter-spacing: 0.18em;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+}
+.mod-foot .sep { color: var(--c-ice-deep); }
+.mod-foot .rec { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--c-red); }
+.mod-foot .rec i {
+  width: 0.3rem; height: 0.3rem; border-radius: 50%;
+  background: var(--c-red);
+  animation: pulse calc(3.4s / var(--motion)) ease-in-out infinite;
+}
+
+
+/* ==========================================================================
+   TOP RIGHT — environment telemetry
+   ========================================================================== */
+
+.tr .mod-head { width: 19rem; }
+.tr .readout {
+  width: 19rem;
+  padding: 0.7rem 0.85rem 0.6rem;
+  background: linear-gradient(160deg, rgba(15,22,28,0.6), rgba(7,11,15,0.5));
+  border: 1px solid var(--c-line);
+}
+.tr .mod-foot { width: 19rem; }
+
+.readout .row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0.2rem 0;
+}
+.readout label {
+  font-size: 0.5rem;
+  letter-spacing: 0.2em;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+}
+
+/* big instrument numbers */
+.readout .val {
+  font-size: 1.02rem;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--c-white);
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: baseline; gap: 0.1rem;
+}
+.readout .val i {
+  font-style: normal;
+  font-size: 0.52rem;
+  color: var(--c-text-dim);
+  letter-spacing: 0.06em;
+}
+.readout .val.cold { color: var(--c-ice); }
+.readout .val.txt {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  color: var(--c-ice);
+  text-transform: uppercase;
+}
+
+/* thin meters under the two percentage rows */
+.meter {
+  height: 2px;
+  margin: 0.12rem 0 0.42rem;
+  background: rgba(27,38,46,0.9);
+  overflow: hidden;
+}
+.meter span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--c-ice-deep), var(--c-ice));
+  transition: width 1.4s ease-out;
+}
+.meter.warn span {
+  background: linear-gradient(90deg, var(--c-red-dim), var(--c-amber));
+}
+
+
+/* ==========================================================================
+   BOTTOM LEFT — subject biometrics
+   ========================================================================== */
+
+.bl { width: 24rem; }
+.bl .mod-head { margin-bottom: 0.55rem; }
+
+.subj-id {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(27,38,46,0.75);
+  font-size: 0.48rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.subj-id .dim { color: var(--c-text-dim); }
+.subj-id .name {
+  font-family: var(--f-sans);
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--c-white);
+  text-transform: none;
+}
+.subj-id .tag {
+  margin-left: auto;
+  font-size: 0.44rem;
+  letter-spacing: 0.14em;
+  color: var(--c-ice-deep);
+}
+
+/* segmented bars */
+.bars { display: flex; flex-direction: column; gap: 0.42rem; }
+
+.bar-row {
+  display: flex; align-items: center; gap: 0.55rem;
+}
+.bar-row .bar-label {
+  flex: none;
+  width: 9.6rem;
+  font-size: 0.47rem;
+  letter-spacing: 0.16em;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+}
+.bar-track {
+  flex: 1;
+  display: flex; gap: 2px;
+  height: 0.42rem;
+}
+.bar-seg {
+  flex: 1;
+  background: rgba(27,38,46,0.85);
+  border-top: 1px solid rgba(42,58,69,0.5);
+}
+.bar-seg.on { background: var(--c-ice-dim); border-top-color: var(--c-ice); }
+.bar-seg.hot { background: var(--c-red-dim); border-top-color: var(--c-red); }
+.bar-row .bar-val {
+  flex: none;
+  width: 2.2rem;
+  text-align: right;
+  font-size: 0.5rem;
+  color: var(--c-ice-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.footnote {
+  margin-top: 0.65rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(27,38,46,0.75);
+  font-size: 0.45rem;
+  letter-spacing: 0.1em;
+  color: var(--c-text-dim);
+  font-style: italic;
+  opacity: 0.85;
+}
+
+
+/* ==========================================================================
+   BOTTOM RIGHT — event log
+   ========================================================================== */
+
+.br { width: 27rem; }
+.br .mod-head { margin-bottom: 0.5rem; }
+
+.log {
+  height: 6.4rem;
+  padding: 0.55rem 0.7rem;
+  background: linear-gradient(160deg, rgba(13,19,24,0.55), rgba(6,10,13,0.45));
+  border: 1px solid var(--c-line);
+  overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+
+.log-line {
+  display: flex; gap: 0.55rem;
+  font-size: 0.48rem;
+  letter-spacing: 0.08em;
+  line-height: 1.55;
+  color: var(--c-text);
+  opacity: 0;
+  transform: translateY(0.25rem);
+  animation: log-in 0.7s ease-out forwards;
+  white-space: nowrap;
+}
+.log-line .t { color: var(--c-ice-deep); flex: none; }
+.log-line .m { overflow: hidden; text-overflow: ellipsis; }
+.log-line.joke .m { color: var(--c-ice); }
+.log-line.joke .t { color: var(--c-amber-dim); }
+
+@keyframes log-in { to { opacity: 1; transform: translateY(0); } }
+
+
+/* ==========================================================================
+   EDGE FURNITURE — corner brackets, barely there
+   ========================================================================== */
+
+.edge-marks { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+.em { position: absolute; width: 1.6rem; height: 1.6rem; opacity: 0.3; }
+.em-tl { top: 0.85rem; left: 0.85rem;  border-top: 1px solid var(--c-ice-deep); border-left: 1px solid var(--c-ice-deep); }
+.em-tr { top: 0.85rem; right: 0.85rem; border-top: 1px solid var(--c-ice-deep); border-right: 1px solid var(--c-ice-deep); }
+.em-bl { bottom: 0.85rem; left: 0.85rem;  border-bottom: 1px solid var(--c-ice-deep); border-left: 1px solid var(--c-ice-deep); }
+.em-br { bottom: 0.85rem; right: 0.85rem; border-bottom: 1px solid var(--c-ice-deep); border-right: 1px solid var(--c-ice-deep); }
+
+
+/* ==========================================================================
+   ANOMALY REGISTER — where the jokes live
+   Three slots, always filled, swapped slowly.
+
+   Sits in the empty band above the bottom panels rather than on --pad, so it
+   never collides with the log panel and stays legible enough that a viewer
+   who is actually paying attention can catch it.
+   ========================================================================== */
+
+.anomaly-register {
+  position: fixed;
+  bottom: calc(var(--pad) + 0.2rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  gap: 2.6rem;
+  pointer-events: none;
+}
+
+.anom {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.52rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: opacity 1.2s ease;
+}
+.anom .k { color: var(--c-text-dim); opacity: 0.85; }
+.anom .arrow { color: var(--c-ice-deep); }
+.anom .v { color: var(--c-ice); opacity: 0.9; }
+.anom.fade { opacity: 0; }
+
+/* short centred hairline just above the anomaly row */
+.anomaly-rule {
+  position: fixed;
+  bottom: calc(var(--pad) + 1.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22rem;
+  height: 1px;
+  z-index: 19;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(42,58,69,0.9) 30%,
+    rgba(42,58,69,0.9) 70%,
+    transparent 100%);
+}
+
+
+/* ==========================================================================
+   WARNING OVERLAY
+   ========================================================================== */
+
+.warn-overlay {
+  position: fixed; inset: 0;
+  z-index: 30;
+  display: grid; place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.warn-overlay.show { opacity: 1; }
+
+.warn-box {
+  font-size: 0.62rem;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  color: var(--c-red);
+  text-transform: uppercase;
+  padding: 0.5rem 1.2rem;
+  border: 1px solid var(--c-red-dim);
+  background: rgba(20,6,6,0.4);
+}
+
+
+/* ==========================================================================
+   BOOT SEQUENCE
+   ========================================================================== */
+
+.boot {
+  position: fixed; inset: 0;
+  z-index: 100;
+  background: var(--c-void);
+  display: grid; place-items: center;
+  transition: opacity 0.55s ease;
+}
+.boot.done { opacity: 0; pointer-events: none; }
+
+.boot-inner { width: 26rem; }
+
+.boot-line {
+  font-size: 0.56rem;
+  letter-spacing: 0.2em;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+  line-height: 2.1;
+  opacity: 0;
+  white-space: nowrap;
+}
+.boot-line::before { content: "> "; color: var(--c-ice-deep); }
+.boot-line.show { animation: boot-line 0.28s ease-out forwards; }
+.boot-line.ok { color: var(--c-ice); }
+.boot-line.ok::after {
+  content: "";
+  display: inline-block;
+  width: 0.4rem; height: 0.72rem;
+  margin-left: 0.4rem;
+  background: var(--c-ice);
+  animation: blink 0.9s steps(1) infinite;
+  vertical-align: middle;
+}
+
+@keyframes boot-line { from { opacity: 0; transform: translateX(-0.4rem); } to { opacity: 1; transform: none; } }
+@keyframes blink { 50% { opacity: 0; } }
+
+
+/* ==========================================================================
+   MOTION SCALE — set from --motion in JS.
+   --motion 0 freezes everything below.
+   ========================================================================== */
+
+body.still .fog > div,
+body.still .contours svg,
+body.still .ct,
+body.still .hex,
+body.still .core-sweep,
+body.still .sweep::before,
+body.still .dot-cyan,
+body.still .dot-red,
+body.still .dot-amber,
+body.still .plate-status .live i,
+body.still .mod-foot .rec i,
+body.still .boot-line.ok::after {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fog > div, .contours svg, .ct, .hex, .core-sweep, .sweep::before {
+    animation: none !important;
+  }
+}

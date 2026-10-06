@@ -1,0 +1,28 @@
+# agent tooling
+# only dot-directories are ignored; plain names stay tracked on purpose
+.workbuddy/
+.claude/
+.codex/
+.cursor/
+.continue/
+.aider*
+*.local.md
+
+# node / wrangler
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+.wrangler/
+
+# os / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+
+# testplace
+testplace/
+

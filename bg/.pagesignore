@@ -1,0 +1,31 @@
+# Files excluded from the Cloudflare Pages upload.
+#
+# CI deploys this directory (bg/) as the site root, so these patterns are
+# resolved relative to bg/ — not to the repo root. Anything outside bg/ is
+# never uploaded in the first place.
+#
+# Right now bg/ holds exactly the 4 runtime files and nothing to exclude.
+# This is a safety net for later: drop a source image or mockup in here and
+# it will stay out of the bundle without anyone remembering to move it.
+
+# source art, never referenced by the page
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.psd
+
+# editor / OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# in case a build step ever lands in here
+node_modules/
+.wrangler/
+package-lock.json
+pnpm-lock.yaml

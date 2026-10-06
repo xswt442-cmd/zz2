@@ -1,0 +1,91 @@
+name: Deploy
+
+# Only main deploys. No preview builds — a live background page has one
+# address (the OBS source), so branch previews would just add churn.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check project mode
+        run: |
+          echo "If this job fails with 'No Pages project found', create the"
+          echo "project first — and if the dashboard asks you to connect a Git"
+          echo "repository, leave that step OUT. Connecting Git would take over"
+          echo "deploys from CI and the two would fight each other."
+          echo
+          echo "Deploy via dashboard Git integration instead? Cancel this run."
+
+      - name: Validate the site is actually servable
+        run: |
+          set -euo pipefail
+          # The site lives in bg/ — that directory IS the Pages output root.
+          # A static upload is the whole build step, but a typo in index.html
+          # would otherwise ship a blank page with no signal.
+          SITE=bg
+          test -d "$SITE"        || { echo "::error::bg/ missing — is the site in the right directory?"; exit 1; }
+          test -f "$SITE/index.html" || { echo "::error::bg/index.html missing"; exit 1; }
+          test -f "$SITE/styles.css" || { echo "::error::bg/styles.css missing"; exit 1; }
+          test -f "$SITE/script.js"  || { echo "::error::bg/script.js missing";  exit 1; }
+          test -f "$SITE/config.js"  || { echo "::error::bg/config.js missing";  exit 1; }
+
+          # Every referenced asset must exist, or OBS shows a bare page.
+          cd "$SITE"
+          for f in $(grep -oE '(href|src)="[^"]+"' index.html \
+                     | sed -E 's/.*="([^"]+)"/\1/' | grep -v '^https\?:'); do
+            test -e "$f" || { echo "::error::index.html references missing file: $f"; exit 1; }
+          done
+          echo "All referenced assets present in $SITE/"
+
+      - name: Parse JS (fail fast on syntax errors)
+        run: node --check bg/config.js && node --check bg/script.js
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: pages deploy bg --project-name=zz2 --branch=main --commit-dirty=true
+
+      - name: Verify the deployment answers
+        run: |
+          set -euo pipefail
+          url="https://zz2.pages.dev"
+          # Pages can take a few seconds to serve a fresh deploy.
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Live at $url"
+              exit 0
+            fi
+            echo "attempt $i: HTTP $code — retrying"
+            sleep 6
+          done
+          echo "::warning::deployment did not answer 200 within 60s; check the Pages dashboard"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| URL | https://zz2.pages.dev |"
+            echo "| OBS source | 1920 x 1080 |"
+            echo "| Live params | \`?name=冰点凝冻&intensity=0.6\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

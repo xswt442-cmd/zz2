@@ -1,0 +1,17 @@
+{
+  // Cloudflare Pages — static deploy, no Worker runtime.
+  //
+  // The site lives in bg/. pages_build_output_dir MUST point there:
+  // deploying the repo root finds no top-level index.html, and Pages
+  // would serve a 404.
+  //
+  // The project name here MUST match the project you create in the
+  // Cloudflare dashboard, otherwise wrangler creates a second one.
+  //
+  // CI reads account/token from CF_ACCOUNT_ID / CF_TOKEN (GitHub secrets),
+  // so no auth block is committed on purpose — never commit a token.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zz2",
+  "pages_build_output_dir": "./bg",
+  "compatibility_date": "2026-10-06"
+}
