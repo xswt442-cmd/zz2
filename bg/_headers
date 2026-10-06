@@ -1,0 +1,27 @@
+# Cloudflare Pages headers
+#
+# Why this exists: by default Pages serves CSS/JS with
+#   Cache-Control: public, max-age=14400, must-revalidate
+# — a 4-hour browser cache. index.html revalidates every load, but the
+# stylesheet and script it pulls in are treated as fresh and reused, so a
+# browser that loaded the site before a deploy keeps serving the old page
+# while another browser shows the new one.
+#
+# This page is a live OBS source that gets tweaked and redeployed often.
+# Stale assets are worse here than a few extra requests: the page is four
+# files and roughly 72 KB total.
+#
+# Precedence: Pages applies _headers rules BEFORE the defaults, and
+# cache-control rules given here replace the default entirely.
+
+/*:
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Assets: revalidate on every load rather than serving a stale copy for
+# hours. max-age=0 still allows conditional requests (304, tiny body), so
+# repeat views stay cheap without ever going stale.
+/*.css:
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*.js:
+  Cache-Control: public, max-age=0, must-revalidate

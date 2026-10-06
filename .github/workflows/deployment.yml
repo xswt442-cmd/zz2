@@ -43,6 +43,10 @@ jobs:
           test -f "$SITE/styles.css" || { echo "::error::bg/styles.css missing"; exit 1; }
           test -f "$SITE/script.js"  || { echo "::error::bg/script.js missing";  exit 1; }
           test -f "$SITE/config.js"  || { echo "::error::bg/config.js missing";  exit 1; }
+          # Without _headers, Pages serves CSS/JS with max-age=14400 and a
+          # browser keeps the old page for hours after a deploy. It fails
+          # silently, so assert it is present.
+          test -f "$SITE/_headers"   || { echo "::error::bg/_headers missing — assets will be cached for 4h and edits will appear stale"; exit 1; }
 
           # Every referenced asset must exist, or OBS shows a bare page.
           cd "$SITE"
